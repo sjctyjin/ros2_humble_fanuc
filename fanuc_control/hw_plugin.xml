@@ -1,0 +1,9 @@
+<library path="fanuc">
+  <class name="fanuc/FanucHw"
+         type="fanuc::FanucHw"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Hardware plugin for fanuc crx series.
+    </description>
+  </class>
+</library>
