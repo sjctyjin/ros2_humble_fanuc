@@ -15,6 +15,7 @@ ros2 run transform_example yolov8_detect
 ```bash
 cd ~/fanuc_ws & source install/setup.bash
 ros2 launch crx10ia_l_moveit_config demo.launch.py
+ros2 launch crx_description view_robot.launch.py robot_type:=crx10ia_l
 ```
 
 ## **4. 將相機座標轉換至 Fanuc 世界座標**
