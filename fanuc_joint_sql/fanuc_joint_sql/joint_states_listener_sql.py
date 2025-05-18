@@ -1,103 +1,156 @@
+#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-
 from sensor_msgs.msg import JointState
-
-import pyodbc
+from geometry_msgs.msg import Pose
+import pymssql
 import numpy as np
 import time
+import math
+from scipy.spatial.transform import Rotation as R
 
-class JointStatesToSQL(Node):
+class SQLToROSNode(Node):
     def __init__(self):
-        super().__init__('joint_states_to_sql')
-
-        # 1) 建立資料庫連線
+        super().__init__('sql_to_ros_node')
+        
+        # 1) 建立資料庫連線 (改為 pymssql)
         try:
-            self.conn = pyodbc.connect(
-                'DRIVER={ODBC Driver 17 for SQL Server};'
-                'SERVER=192.168.1.101;'   # 資料庫伺服器的 IP 或名稱
-                'DATABASE=Fanuc;'    # 資料庫名稱
-                'UID=sa;'            # 帳號
-                'PWD=pass;'          # 密碼
+            self.conn = pymssql.connect(
+                server='192.168.68.198',
+                user='sa',
+                password='pass',
+                database='Fanuc'
             )
             self.cursor = self.conn.cursor()
-            self.get_logger().info("Successfully connected to SQL Server.")
+            self.get_logger().info("✅ Successfully connected to SQL Server using pymssql.")
         except Exception as e:
-            self.get_logger().error(f"Failed to connect SQL Server: {e}")
-
-        # 2) 訂閱 /joint_states
-        #    這裡預期包含至少 6 個 position (J1 ~ J6)
+            self.get_logger().error(f"❌ Failed to connect SQL Server: {e}")
+            self.conn = None
+            self.cursor = None
+        
+        # 2) 訂閱 /joint_states 寫入 SQL（預設先註解）
         self.subscription = self.create_subscription(
-            JointState,
-            '/joint_states',
-            self.joint_callback,
-            10
-        )
-        self.subscription  # prevent unused variable warning
-
+             JointState,
+             '/joint_states',
+             self.joint_callback,
+             10
+         )
+        
+        # 3) 發布末端位姿
+        self.end_pose_pub = self.create_publisher(Pose, '/end_pose', 10)
+        
+        # 4) 發布關節狀態
+        self.joint_ctrl_single_pub = self.create_publisher(JointState, '/joint_ctrl_single', 10)
+        
+        # 5) 建立定時器每 0.1 秒查詢 SQL 並發布資料
+        self.timer = self.create_timer(0.1, self.read_sql_and_publish)
+        
+        self.joint_names = ['J1', 'J2', 'J3', 'J4', 'J5', 'J6', 'gripper']
+    
     def joint_callback(self, msg: JointState):
-        """
-        每次收到 /joint_states 都會觸發此函式。
-        """
-        # 確保有足夠關節 (至少 6 軸)
+        """接收 /joint_states 並寫入 SQL"""
+        if not self.cursor:
+            return
+            
         if len(msg.position) < 6:
             self.get_logger().warn("Received joint_states with fewer than 6 positions.")
             return
-
-        # 取得前6軸 (J1~J6) 的弧度值
+        
         joint_poses_rad = np.array(msg.position[:6], dtype=float)
-        # 轉成角度
         joint_poses_deg = np.degrees(joint_poses_rad)
-
-        # 根據題示，需要 Z_J3 = J3 - J2 (以角度為單位)
+        
         j1 = round(joint_poses_deg[0], 2)
         j2 = round(joint_poses_deg[1], 2)
-        # j3 為 "J3 - J2"
-        j3 = round(joint_poses_deg[2] - j2, 2)
+        j3 = round(joint_poses_deg[2] - j2, 2)  # J3 - J2
         j4 = round(joint_poses_deg[3], 2)
         j5 = round(joint_poses_deg[4], 2)
         j6 = round(joint_poses_deg[5], 2)
-
-        # 取得目前時間
+        
         current_time = time.strftime('%Y-%m-%d %H:%M:%S')
-
-        # 組合 SQL 指令
+        
         sql_query = (
-            f"UPDATE PR_Status SET "
-            f" X_J1 = '{j1}',"
-            f" Y_J2 = '{j2}',"
-            f" Z_J3 = '{j3}',"
-            f" W_J4 = '{j4}',"
-            f" P_J5 = '{j5}',"
-            f" R_J6 = '{j6}',"
-            f" move='1',"
-            f" moveType='joint',"
-            f" time='{current_time}'"
-            f" WHERE PR_No = 'PR[4]'"
+            "UPDATE PR_Status SET "
+            f"X_J1 = '{j1}', "
+            f"Y_J2 = '{j2}', "
+            f"Z_J3 = '{j3}', "
+            f"W_J4 = '{j4}', "
+            f"P_J5 = '{j5}', "
+            f"R_J6 = '{j6}', "
+            "move = '1', "
+            "moveType = 'joint', "
+            f"time = '{current_time}' "
+            "WHERE PR_No = 'PR[4]'"
         )
-
-        # 執行更新
+        
         try:
             self.cursor.execute(sql_query)
             self.conn.commit()
-            self.get_logger().info(f"SQL update success: {sql_query}")
+            self.get_logger().debug("✅ SQL update success for PR_Status")
         except Exception as e:
-            self.get_logger().error(f"SQL update failed: {e}")
+            self.get_logger().error(f"❌ SQL update failed: {e}")
+    
+    def read_sql_and_publish(self):
+        """從 SQL 讀取資料並發布至 ROS topic"""
+        if not self.cursor:
+            return
+            
+        try:
+            self.cursor.execute("""
+                SELECT [X], [Y], [Z], [W], [P], [R], [J1], [J2], [J3], [J4], [J5], [J6], [time]
+                FROM [Coord_Status]
+            """)
+            row = self.cursor.fetchone()
+            
+            if not row:
+                self.get_logger().warn("⚠️ No data found in Coord_Status table")
+                return
+            
+            x, y, z, w, p, r, j1, j2, j3, j4, j5, j6, timestamp = row
+            
+            # 發布末端位姿
+            endpos = Pose()
+            endpos.position.x = float(x) / 1000
+            endpos.position.y = float(y) / 1000
+            endpos.position.z = float(z) / 1000
 
+            roll = math.radians(float(w) )
+            pitch = math.radians(float(p) )
+            yaw = math.radians(float(r) )
+
+            quat = R.from_euler('xyz', [roll, pitch, yaw]).as_quat()
+            endpos.orientation.x, endpos.orientation.y, endpos.orientation.z, endpos.orientation.w = quat
+            self.end_pose_pub.publish(endpos)
+            
+            # 發布關節值
+            joint_state = JointState()
+            joint_state.header.stamp = self.get_clock().now().to_msg()
+            joint_state.name = self.joint_names
+            joint_state.position = [
+                math.radians(float(j1)),
+                math.radians(float(j2)),
+                math.radians(float(j3)),
+                math.radians(float(j4)),
+                math.radians(float(j5)),
+                math.radians(float(j6)),
+                0.0  # gripper 預設值
+            ]
+            self.joint_ctrl_single_pub.publish(joint_state)
+            self.get_logger().debug(f"Published pose and joint data from SQL (timestamp: {timestamp})")
+        except Exception as e:
+            self.get_logger().error(f"❌ Error reading from SQL or publishing: {e}")
+    
     def destroy_node(self):
-        """
-        在節點銷毀前關閉資料庫連線。
-        """
+        """在節點銷毀前關閉資料庫連線"""
         if hasattr(self, 'cursor') and self.cursor:
             self.cursor.close()
         if hasattr(self, 'conn') and self.conn:
             self.conn.close()
         super().destroy_node()
 
-
 def main(args=None):
     rclpy.init(args=args)
-    node = JointStatesToSQL()
+    node = SQLToROSNode()
+    
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
@@ -105,3 +158,7 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+

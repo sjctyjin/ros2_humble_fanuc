@@ -24,6 +24,7 @@ setup(
 		'joint_states_sql = fanuc_joint_sql.joint_states_listener_sql:main',
 		'moveit_goal_setting = fanuc_joint_sql.moveit_goal_setting:main',
 		'moveit_fram_to_world = fanuc_joint_sql.moveit_fram_to_world:main',
+		'joint_gui_pub = fanuc_joint_sql.joint_gui_pub:main',
         ],
     },
 )

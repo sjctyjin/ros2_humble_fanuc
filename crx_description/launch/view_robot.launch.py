@@ -14,7 +14,7 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             "robot_type",
-            default_value="crx25ia_l",
+            default_value="crx10ia_l",
             description="model of the fanuc robot. ",
         )
     )
@@ -56,6 +56,20 @@ def launch_setup(context, *args, **kwargs):
         output="both",
         parameters=[robot_description],
     )
+    
+    cus_state_publisher_node = Node(
+        package="fanuc_joint_sql",
+        executable="joint_gui_pub",
+        name='joint_gui_pubs',
+        output="both",
+    )
+    robot_controller_node = Node(
+        package="fanuc_joint_sql",
+        executable="joint_states_sql",
+        name='joint_states_sql',
+        output="screen",
+    )
+    
     rviz_node = Node(
         package="rviz2",
         executable="rviz2",
@@ -65,7 +79,9 @@ def launch_setup(context, *args, **kwargs):
     )
 
     nodes_to_start = [
-        joint_state_publisher_node,
+        #joint_state_publisher_node,
+        #robot_controller_node,
+        cus_state_publisher_node,
         robot_state_publisher_node,
         rviz_node,
     ]
