@@ -486,7 +486,7 @@ class PickAndPlaceNode(Node):
             
                 self.get_logger().info("回到home點!")
                 
-                time.sleep(1.0)
+                time.sleep(1.5)
                 
                 # 创建回到初始姿态的目标
                 
@@ -547,7 +547,7 @@ class PickAndPlaceNode(Node):
             self.gripper_check_timer += 1#避免無限迴圈
             if self.current_state == self.STATE_WATTING_GRIPPER:#判斷當前主線程是否在等待               
                 self.get_logger().info(f"✅ 夾取線程等待 : {self.gripper_check_timer}")                    
-                if self.gripper_check_timer >= 45:
+                if self.gripper_check_timer >= 20:
                 
                     if self.pick_check == 1:
                         self.get_logger().info("✅ 夾取成功，Pick_check = 1")
@@ -572,11 +572,6 @@ class PickAndPlaceNode(Node):
                         self.pick_check = -1                                                        
                         self.gripper_data_event = False                
                         self.gripper_check_timer = 0
-                        
-                
-             
-                
-        
  
 
 def main(args=None):
