@@ -37,6 +37,7 @@ class SQLToROSNode(Node):
              self.joint_callback,
              10
          )
+         
         
         # 3) 發布末端位姿
         self.end_pose_pub = self.create_publisher(Pose, '/end_pose', 10)
@@ -58,7 +59,8 @@ class SQLToROSNode(Node):
             bytesize=serial.EIGHTBITS,
             timeout=0.1             # 讀取超時設置
         )
-        self.gripper_pos = 0
+        self.gripper_pos = 0 # 確認扭力 是否抓到物體
+        self.gripper_state = 0
     
     def joint_callback(self, msg: JointState):
         """接收 /joint_states 並寫入 SQL"""
@@ -80,22 +82,9 @@ class SQLToROSNode(Node):
         j5 = round(joint_poses_deg[4], 2)
         j6 = round(joint_poses_deg[5], 2)
         #gripper = round(joint_poses_deg[6], 2)
-        self.get_logger().info(f"✅ SQL update success for PR_Status 夾爪-{gripper}")
+        #self.get_logger().info(f"✅ SQL update success for PR_Status 夾爪-{gripper}")
 
-        if gripper == 0:
-            self.ser.write(bytes([0x01, 0x06, 0x00, 0x10, 0x00, 0x90, 0x88, 0x63]))  # Start Num0 開啟
-            # 接收數據 Num1
-            received_data = self.ser.readline()  # 讀取10個字節的數據
-            time.sleep(0.5)
-            #print("開啟 : ",received_data)
-        else:
-            if self.gripper_pos > 300 and self.gripper_pos < 1000:
-                self.get_logger().info(f"已抓到物體-{self.gripper_pos}")
-            elif self.gripper_pos < 40:
-                self.get_logger().info(f"關閉中-{self.gripper_pos}")
-                self.ser.write( bytes([0x01, 0x06, 0x00, 0x10, 0x00, 0x91, 0x49, 0xA3])) # Start Num1 關閉
-                received_data = self.ser.readline()
-                time.sleep(0.5)
+        
 
         current_time = time.strftime('%Y-%m-%d %H:%M:%S')
         
@@ -117,6 +106,25 @@ class SQLToROSNode(Node):
             self.cursor.execute(sql_query)
             self.conn.commit()
             self.get_logger().debug("✅ SQL update success for PR_Status")
+            
+            if gripper == 0:
+                self.gripper_state += 1
+                if self.gripper_state >= 5 and self.gripper_state < 10:
+                    self.ser.write(bytes([0x01, 0x06, 0x00, 0x10, 0x00, 0x90, 0x88, 0x63]))  # Start Num0 開啟
+                    self.ser.read(200)
+                # 接收數據 Num1
+                #received_data = self.ser.readall()  # 讀取10個字節的數據
+            else:
+                self.gripper_state = 0
+                if self.gripper_pos > 300 and self.gripper_pos < 1000:
+                    self.get_logger().info(f"已抓到物體-{self.gripper_pos}")
+                elif self.gripper_pos < 40:
+                    self.get_logger().info(f"關閉中-{self.gripper_pos}")
+                    self.ser.write( bytes([0x01, 0x06, 0x00, 0x10, 0x00, 0x91, 0x49, 0xA3])) # Start Num1 關閉
+                    self.ser.read(200)
+                    #received_data = self.ser.readall()
+                        #time.sleep(0.5)
+            
         except Exception as e:
             self.get_logger().error(f"❌ SQL update failed: {e}")
     
@@ -151,7 +159,7 @@ class SQLToROSNode(Node):
             quat = R.from_euler('xyz', [roll, pitch, yaw]).as_quat()
             endpos.orientation.x, endpos.orientation.y, endpos.orientation.z, endpos.orientation.w = quat
             self.end_pose_pub.publish(endpos)
-            
+            self.ser.read_all()
             self.ser.write(bytes([0x01, 0x04, 0x00, 0x26, 0x00, 0x05, 0xd1, 0xc2]))  # Start Read
             received_data = self.ser.read(200)
 
@@ -208,4 +216,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
