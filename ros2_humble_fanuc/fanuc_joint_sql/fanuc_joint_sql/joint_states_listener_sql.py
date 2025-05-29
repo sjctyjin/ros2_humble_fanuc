@@ -109,7 +109,7 @@ class SQLToROSNode(Node):
             
             if gripper == 0:
                 self.gripper_state += 1
-                if self.gripper_state >= 5 and self.gripper_state < 10:
+                if self.gripper_state >= 1 and self.gripper_state < 5:
                     self.ser.write(bytes([0x01, 0x06, 0x00, 0x10, 0x00, 0x90, 0x88, 0x63]))  # Start Num0 開啟
                     self.ser.read(200)
                 # 接收數據 Num1
