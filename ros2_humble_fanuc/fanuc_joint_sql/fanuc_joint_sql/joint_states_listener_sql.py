@@ -7,6 +7,8 @@ import pymssql
 import numpy as np
 import time
 import math
+import serial
+import struct
 from scipy.spatial.transform import Rotation as R
 
 class SQLToROSNode(Node):
@@ -16,7 +18,7 @@ class SQLToROSNode(Node):
         # 1) 建立資料庫連線 (改為 pymssql)
         try:
             self.conn = pymssql.connect(
-                server='192.168.3.105',
+                server='192.168.1.105',
                 user='sa',
                 password='pass',
                 database='Fanuc'
@@ -46,9 +48,21 @@ class SQLToROSNode(Node):
         self.timer = self.create_timer(0.1, self.read_sql_and_publish)
         
         self.joint_names = ['J1', 'J2', 'J3', 'J4', 'J5', 'J6', 'gripper']
+        
+        self.ser = serial.Serial(
+        #    # port='COM7',  # 這裡的端口號根據您的設備而定
+            port='/dev/ttyUSB0',  # 這裡的端口號根據您的設備而定
+            baudrate=115200,        # 設置波特率
+            parity='E',
+            stopbits=serial.STOPBITS_ONE,
+            bytesize=serial.EIGHTBITS,
+            timeout=0.1             # 讀取超時設置
+        )
+        self.gripper_pos = 0
     
     def joint_callback(self, msg: JointState):
         """接收 /joint_states 並寫入 SQL"""
+        
         if not self.cursor:
             return
             
@@ -58,14 +72,31 @@ class SQLToROSNode(Node):
         
         joint_poses_rad = np.array(msg.position[:6], dtype=float)
         joint_poses_deg = np.degrees(joint_poses_rad)
-        
+        gripper = round(msg.position[6])
         j1 = round(joint_poses_deg[0], 2)
         j2 = round(joint_poses_deg[1], 2)
         j3 = round(joint_poses_deg[2] - j2, 2)  # J3 - J2
         j4 = round(joint_poses_deg[3], 2)
         j5 = round(joint_poses_deg[4], 2)
         j6 = round(joint_poses_deg[5], 2)
-        
+        #gripper = round(joint_poses_deg[6], 2)
+        self.get_logger().info(f"✅ SQL update success for PR_Status 夾爪-{gripper}")
+
+        if gripper == 0:
+            self.ser.write(bytes([0x01, 0x06, 0x00, 0x10, 0x00, 0x90, 0x88, 0x63]))  # Start Num0 開啟
+            # 接收數據 Num1
+            received_data = self.ser.readline()  # 讀取10個字節的數據
+            time.sleep(0.5)
+            #print("開啟 : ",received_data)
+        else:
+            if self.gripper_pos > 300 and self.gripper_pos < 1000:
+                self.get_logger().info(f"已抓到物體-{self.gripper_pos}")
+            elif self.gripper_pos < 40:
+                self.get_logger().info(f"關閉中-{self.gripper_pos}")
+                self.ser.write( bytes([0x01, 0x06, 0x00, 0x10, 0x00, 0x91, 0x49, 0xA3])) # Start Num1 關閉
+                received_data = self.ser.readline()
+                time.sleep(0.5)
+
         current_time = time.strftime('%Y-%m-%d %H:%M:%S')
         
         sql_query = (
@@ -121,6 +152,22 @@ class SQLToROSNode(Node):
             endpos.orientation.x, endpos.orientation.y, endpos.orientation.z, endpos.orientation.w = quat
             self.end_pose_pub.publish(endpos)
             
+            self.ser.write(bytes([0x01, 0x04, 0x00, 0x26, 0x00, 0x05, 0xd1, 0xc2]))  # Start Read
+            received_data = self.ser.read(200)
+
+            torque = struct.unpack('>H',received_data[3:5])[0]
+            speed = struct.unpack('>H',received_data[5:7])
+            position_gripper = struct.unpack('>H',received_data[7:9])[0]/1000
+            voltage = struct.unpack('>H',received_data[9:11])
+            temperature = struct.unpack('>H',received_data[11:13])
+            self.gripper_pos = torque
+            #print("扭力值 : ",torque)
+            #print("速度 : ",speed)
+            #print("位置 : ",position_gripper)
+            #print("電壓 : ",voltage)
+            #print("溫度 : ",temperature)
+
+            
             # 發布關節值
             joint_state = JointState()
             joint_state.header.stamp = self.get_clock().now().to_msg()
@@ -132,7 +179,7 @@ class SQLToROSNode(Node):
                 math.radians(float(j4)),
                 math.radians(float(j5)),
                 math.radians(float(j6)),
-                0.0  # gripper 預設值
+                float(position_gripper)  # gripper 預設值
             ]
             self.joint_ctrl_single_pub.publish(joint_state)
             self.get_logger().debug(f"Published pose and joint data from SQL (timestamp: {timestamp})")

@@ -48,10 +48,10 @@ def launch_setup(context, *args, **kwargs):
         executable="joint_state_publisher_gui",
     )
 
-    joint_state_publisher_node = Node(
-        package="joint_state_publisher",
-        executable="joint_state_publisher",
-    )
+    #joint_state_publisher_node = Node(
+    #    package="joint_state_publisher",
+    #    executable="joint_state_publisher",
+    #)
     robot_state_publisher_node = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
@@ -105,10 +105,10 @@ def launch_setup(context, *args, **kwargs):
 
     nodes_to_start = [
         #joint_state_publisher_node,
-        robot_controller_node,
         cus_state_publisher_node,
         robot_state_publisher_node,
         rviz_node,
+        robot_controller_node,
         cam_node,
         cam1_yolo
     ]

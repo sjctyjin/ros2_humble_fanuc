@@ -8,7 +8,7 @@ class JointRelayNode(Node):
     def __init__(self):
         super().__init__('joint_relay_node')
 
-        self.joint_names = ['J1', 'J2', 'J3', 'J4', 'J5', 'J6']
+        self.joint_names = ['J1', 'J2', 'J3', 'J4', 'J5', 'J6','gripper']
 
         self.publisher = self.create_publisher(JointState, '/joint_states', 10)
         self.publisher_custom = self.create_publisher(JointState, '/joint_custom_state', 10)
@@ -37,7 +37,7 @@ class JointRelayNode(Node):
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = self.joint_names
-        msg.position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        msg.position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         msg.velocity = [0.0] * len(self.joint_names)
         msg.effort = [0.0] * len(self.joint_names)
 

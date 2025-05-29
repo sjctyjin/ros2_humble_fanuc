@@ -8,6 +8,8 @@ import numpy as np
 import torch
 import time
 import threading
+
+
 # CuRobo 导入
 from curobo.types.math import Pose
 from curobo.types.robot import JointState as CuroboJointState
@@ -30,7 +32,7 @@ class PickAndPlaceNode(Node):
         
         # 初始化张量设备类型
         self.tensor_args = TensorDeviceType()
-        
+
         # 声明参数
         self.declare_parameter('robot_config', 'cr10_ial.yml')
         self.declare_parameter('enable_rosbridge', False)
@@ -41,11 +43,11 @@ class PickAndPlaceNode(Node):
         #self.declare_parameter('place_position_x', 0.10)
         #self.declare_parameter('place_position_y', -0.245)
         #self.declare_parameter('place_position_z', 0.260)
-        self.declare_parameter('place_position_x', -0.0174)
-        self.declare_parameter('place_position_y', 0.321)
-        self.declare_parameter('place_position_z', 0.250)
-        self.declare_parameter('gripper_close_value', 0.0)
-        self.declare_parameter('gripper_open_value', -0.05)
+        self.declare_parameter('place_position_x', 0.155)
+        self.declare_parameter('place_position_y', 0.550)
+        self.declare_parameter('place_position_z', 0.082)
+        self.declare_parameter('gripper_close_value', 1.0)
+        self.declare_parameter('gripper_open_value', 0.0)
         
         # 读取参数
         self.robot_config = self.get_parameter('robot_config').get_parameter_value().string_value
@@ -90,7 +92,7 @@ class PickAndPlaceNode(Node):
         
         self.real_subscription = self.create_subscription(
             JointState,
-            '/joint_states_single',
+            '/joint_ctrl_single',
             self.joint_callback,
             10
         )
@@ -157,13 +159,13 @@ class PickAndPlaceNode(Node):
         self.STATE_MOVE_TO_PLACE = 3
         self.STATE_RELEASE = 4
         self.STATE_MOVE_TO_HOME = 5
-        self.STATE_WATTING_GRIPPER=6
+        self.STATE_WATTING_GRIPPER = 6
         self.current_state = self.STATE_IDLE
         self.previous_state = 0
         # 保存抓取位置
         self.pick_position = None
         self.pick_orientation = None
-        self.pick_check = 0
+        self.pick_check = -1
         self.pre_pick_check = -1
         #保存初次的joint值
         self.latest_joint_state = None
@@ -308,7 +310,7 @@ class PickAndPlaceNode(Node):
         self.mpc.update_goal(goal_buf)
         # 4. 循环 step, 累积轨迹
         
-        max_iters = 150
+        max_iters = 120
         check_traj = True
         k = 0
         for _ in range(max_iters):
@@ -425,7 +427,7 @@ class PickAndPlaceNode(Node):
                     
                     self.current_state = self.STATE_GRASP
                     self.get_logger().info("規劃到夾取位置成功--- 等待2秒")
-                    time.sleep(2.0)
+                    time.sleep(1.5)
                 else:
                     # 规划失败，回到IDLE状态
                     self.current_state = self.STATE_IDLE
@@ -435,7 +437,7 @@ class PickAndPlaceNode(Node):
                 # 关闭夹爪
                 if self.operate_gripper(current_joint_positions, self.gripper_close_value):                
                     self.get_logger().info("夹取成功，等待一段时间...")   
-                    time.sleep(1)  # 等待一秒确保夹紧             
+                    time.sleep(0.5)  # 等待一秒确保夹紧             
                     self.gripper_data_event = True   
                     self.current_state = self.STATE_WATTING_GRIPPER                           
                 
@@ -454,7 +456,7 @@ class PickAndPlaceNode(Node):
                 #])
                 place_pose = Pose.from_list([
                     self.place_position_x, self.place_position_y, self.place_position_z,
-                    -0.008, 0.674, 0.020, 0.738
+                    -0.024,0.644, 0.758,0.092
                 ])
                 if self.previous_state == self.STATE_MOVE_TO_HOME:
                     self.current_state = self.STATE_MOVE_TO_HOME
@@ -464,7 +466,7 @@ class PickAndPlaceNode(Node):
                     if self.plan_and_execute(current_joint_positions, place_pose, self.gripper_close_value):
                         self.current_state = self.STATE_RELEASE
                         self.get_logger().info(f"等待3秒到放置點")
-                        time.sleep(3.0)
+                        time.sleep(2.0)
                     else:
                         # 规划失败，回到IDLE状态
                         self.current_state = self.STATE_IDLE
@@ -526,10 +528,10 @@ class PickAndPlaceNode(Node):
         try:
             gripper_index = msg.name.index('gripper')  # 找到 gripper 在 name 中的索引
             gripper_position = msg.position[gripper_index]  # 取得對應位置
-            #self.get_logger().info(f'Gripper position: {gripper_position:.4f}')
+            self.get_logger().info(f'Gripper position: {gripper_position:.4f}')
 
             # 根據 gripper 開口程度判斷是否抓取成功（依據你的實際值調整閾值）
-            if abs(gripper_position) > 0.02:
+            if abs(gripper_position) < 1.0 and abs(gripper_position) > 0.2:
                 #self.get_logger().info("✅ 夾取成功（Gripper 關閉）")
                 self.pick_check = 1
             else:
@@ -539,27 +541,38 @@ class PickAndPlaceNode(Node):
         except ValueError:
             self.get_logger().warn("找不到 'gripper' 關節名稱")
     def T2(self):
-        self.get_logger().info(f"Timer執行中...\n當前pre_pick_check:{self.pre_pick_check}\n當前pick_check:{self.pick_check}\n當前current_state:{self.current_state}\n當前previous_state:{self.previous_state}")
+        #self.get_logger().info(f"Timer執行中...\n當前pre_pick_check:{self.pre_pick_check}\n當前pick_check:{self.pick_check}\n當前current_state:{self.current_state}\n當前previous_state:{self.previous_state}")
         # 轉發給 /web_tf topic
         if self.gripper_data_event:
             self.gripper_check_timer += 1#避免無限迴圈
-            if self.current_state == self.STATE_WATTING_GRIPPER:#判斷當前主線程是否在等待
+            if self.current_state == self.STATE_WATTING_GRIPPER:#判斷當前主線程是否在等待               
+                self.get_logger().info(f"✅ 夾取線程等待 : {self.gripper_check_timer}")                    
+                if self.gripper_check_timer >= 45:
+                
                     if self.pick_check == 1:
                         self.get_logger().info("✅ 夾取成功，Pick_check = 1")
                         self.current_state = self.STATE_MOVE_TO_PLACE
                         self.previous_state = self.STATE_MOVE_TO_HOME
-                        self.pre_pick_check = self.pick_check#最後才shift                       
-                    else:
+                        self.pre_pick_check = self.pick_check#最後才shift  
+                        self.pick_check = -1         
+                        self.gripper_data_event = False                
+                        self.gripper_check_timer = 0            
+                    elif self.pick_check == 0:
+                        self.get_logger().warn("❌ 夾取失敗，Pick_check = 0")
+                        self.current_state = self.STATE_MOVE_TO_HOME
+                        self.pre_pick_check = self.pick_check#最後才shift 
+                        self.pick_check = -1                                                        
+                        self.gripper_data_event = False                
+                        self.gripper_check_timer = 0
+                        
+                    if self.gripper_check_timer >= 100:
                         self.get_logger().warn("❌ 夾取超時，Pick_check = 0")
                         self.current_state = self.STATE_MOVE_TO_HOME
                         self.pre_pick_check = self.pick_check#最後才shift 
-                                                        
-                    self.gripper_data_event = False                
-                    self.gripper_check_timer = 0
-                
-            if self.gripper_check_timer >= 50:
-                self.gripper_check_timer = 0
-                self.get_logger().warn("❌ 判斷夾取超時，Pick_check = 0")
+                        self.pick_check = -1                                                        
+                        self.gripper_data_event = False                
+                        self.gripper_check_timer = 0
+                        
                 
              
                 

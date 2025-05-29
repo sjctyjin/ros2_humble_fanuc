@@ -157,6 +157,23 @@
       </geometry>
     </collision>
   </link>
+  <link name="gripper_close">
+    <visual>
+      <origin rpy="0 0 0" xyz="-0.05 -0.055 -0.0397"/>
+      <geometry>
+        <mesh filename="package://crx_description/meshes/crx10ia_l/visual/gripper_close.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="invisible">
+	  <color rgba="0 0 0 0"/>
+	</material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://crx_description/meshes/crx10ia_l/visual/gripper_close.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
 
     <!-- joints -->
     <joint name="J1" type="revolute">
@@ -213,6 +230,15 @@
         <axis xyz="-1 0 0"/>
         <limit effort="0" lower="-3.9269908169872414" upper="3.9269908169872414" velocity="1.9547687622336491"/>
    </joint>
+   <joint name="gripper" type="revolute">
+       <origin rpy="0 0 -1.57" xyz="-0.0 -0.0 -0.0"/>
+	<parent link="link_6"/>
+        <child link="gripper_close"/>
+        <axis xyz="0 0 1"/>
+         <limit effort="0" lower="0" upper="1" velocity="1.9547687622336491"/>
+   </joint>
+   
+
     <!-- fanuc world -->
     <link name="fanuc_world" />
     <joint name="base_link-fanuc_world" type="fixed">
