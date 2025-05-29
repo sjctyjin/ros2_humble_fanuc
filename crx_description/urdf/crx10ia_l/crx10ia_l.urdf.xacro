@@ -161,7 +161,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="-0.05 -0.055 -0.0397"/>
       <geometry>
-        <mesh filename="package://crx_description/meshes/crx10ia_l/visual/gripper_close.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://crx_description/meshes/crx10ia_l/visual/gripper.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="invisible">
 	  <color rgba="0 0 0 0"/>
@@ -170,7 +170,7 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="package://crx_description/meshes/crx10ia_l/visual/gripper_close.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://crx_description/meshes/crx10ia_l/visual/gripper.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
