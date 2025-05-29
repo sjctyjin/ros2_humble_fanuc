@@ -148,11 +148,29 @@
       <geometry>
         <mesh filename="package://crx_description/meshes/crx10ia_l/visual/gripper.stl" scale="0.001 0.001 0.001"/>
       </geometry>
+      <material name="white"/>
     </visual>
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="package://crx_description/meshes/crx10ia_l/visual/gripper.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="gripper_close">
+    <visual>
+      <origin rpy="0 0 0" xyz="-0.05 -0.055 -0.0397"/>
+      <geometry>
+        <mesh filename="package://crx_description/meshes/crx10ia_l/visual/gripper_close.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="invisible">
+	  <color rgba="0 0 0 0"/>
+	</material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://crx_description/meshes/crx10ia_l/visual/gripper_close.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -212,6 +230,15 @@
         <axis xyz="-1 0 0"/>
         <limit effort="0" lower="-3.9269908169872414" upper="3.9269908169872414" velocity="1.9547687622336491"/>
    </joint>
+   <joint name="gripper" type="revolute">
+       <origin rpy="0 0 -1.57" xyz="-0.0 -0.0 -0.0"/>
+	<parent link="link_6"/>
+        <child link="gripper_close"/>
+        <axis xyz="0 0 1"/>
+         <limit effort="0" lower="0" upper="1" velocity="1.9547687622336491"/>
+   </joint>
+   
+
     <!-- fanuc world -->
     <link name="fanuc_world" />
     <joint name="base_link-fanuc_world" type="fixed">
@@ -240,7 +267,8 @@
    <xacro:include filename="$(find realsense_custom_description)/urdf/test_d435i_camera.urdf.xacro"/>
    <!-- 相機與第六軸連接 -->
 <joint name="d435_joint" type="fixed">
-    <origin xyz="0.080 0.0669 -0.0473" rpy="-0.3448 0.0184 -1.536"/>
+    <!-- <origin xyz="0.1 0.00 0.00" rpy="-0.3448 -0.01 -1.536"/> -->
+    <origin xyz="0.105 0.00 -0.005" rpy="0.0 0.0 -1.57"/>
     <parent link="link_6"/>
     <child link="d435_base_link"/>
 </joint>
