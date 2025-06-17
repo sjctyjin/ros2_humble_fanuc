@@ -26,6 +26,7 @@ setup(
          'curobo_gen_motion = curobo_piper.curobo_gen_motion:main',#curobo gen計算軌跡並持續跟蹤-監聽joint_custom_state
          'curobo_pick_and_place = curobo_piper.curobo_pick_and_place:main',#curobo gen計算軌跡 抓取放
          'curobo_pick_and_place_mpc = curobo_piper.curobo_pick_and_place_MPC:main',#curobo MPC計算軌跡 抓取放
+         'curobo_vr_mpc = curobo_piper.curobo_vr_mpc:main', #Quest3 VR裝置跟蹤
         ],
     },
 )
